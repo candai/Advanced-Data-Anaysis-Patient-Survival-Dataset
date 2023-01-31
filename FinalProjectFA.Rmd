@@ -1,0 +1,213 @@
+---
+title: "Final Project FA"
+author: "Can Dai"
+date: '2022-08-11'
+output: pdf_document
+---
+
+## Problem 1
+
+Choose a technique that we have covered so far in this course, and try applying that technique to your data. You may choose any of
+a) Model building and Multiple Regression b) PCA c) CFA d) CCA e) CA (correspondence analysis)
+If you are working as a group, each member of your group should try a different technique, or the same technique with different aspects of the data.
+
+```{r}
+############## Common Factor Analysis for Patient Survival Dataset #############
+# Dataset cleaning
+
+library(dplyr)
+# Factor Analysis on Patient Survival Dataset
+dataset = read.csv(file="dataset.csv", header=TRUE, sep=",")
+
+dim(dataset)
+str(dataset)
+#names(dataset)
+
+#Remove ID columns
+datasetv1 = dataset[,-c(1,2,3,13)]
+#str(datasetv1)
+
+datasetv2 = datasetv1[,which(colMeans(!is.na(datasetv1))>0.5)]
+sum(is.na(datasetv2))
+
+
+NACheck = lapply(datasetv1, is.na)
+NACheckSum = lapply(NACheck, sum)
+cbind(NACheckSum)
+
+NACheckv2 = lapply(datasetv2, is.na)
+#NACheckv2
+NACheckSumv2 = lapply(NACheckv2, sum)
+#NACheckSumv2
+cbind(NACheckSumv2)
+
+#Listwise Deletion for variables with less than 50% of NAs in their rows. 
+datasetv3 <- na.omit(datasetv2)
+#dim(datasetv3)
+
+sum(is.na(datasetv3))
+
+#str(datasetv3)
+
+datasetv4 <- datasetv3 %>% dplyr::select(where(~!is.character(.))) %>% glimpse()
+
+#str(datasetv4)
+
+### Remove binary columns except target column (hospital_death)
+
+datasetv5 <- datasetv4 %>% dplyr::select(-hospital_death, -elective_surgery,-readmission_status,-apache_post_operative,-arf_apache,
+                                  -gcs_unable_apache,-intubated_apache,-ventilated_apache,-aids,
+                                  -cirrhosis,-diabetes_mellitus,-hepatic_failure,-immunosuppression,-leukemia,
+                                  -lymphoma,-solid_tumor_with_metastasis) %>% glimpse()
+#str(datasetv5)
+#dim(datasetv5)
+
+```
+
+```{r}
+#### Remove non continuous numerical variables
+
+datasetv6 <- datasetv5[,-c(6,7,10,11,12)]
+
+str(datasetv6)
+dim(datasetv6)
+head(datasetv6)
+
+
+```
+
+```{r warning=FALSE}
+# Factoribility / Reliability Tests
+
+#Test KMO Sampling Adequacy
+library(psych)
+KMO(datasetv6)
+#Overall MSA =  0.81
+
+#Test Bartlett's Test of Sphericity => checking for correlation 
+library(REdaS)
+bart_spher(datasetv6)
+#p-value < 2.22e-16 (Very Small Number)
+
+#Test for Reliability Analysis using Cronbach's Alpha => Looking for >0.7 => these data points belong together
+alpha(datasetv6,check.keys=TRUE)
+#raw_alpha = 0.8199
+
+
+```
+
+KMO value is 0.81, the Bartlett's Test of Sphericity indicate that the p-value < 2.22e-16 and the Cronbach's Alpha test indicate that raw_alpha = 0.8199. These values indicate that the data is reliable and stable.
+
+```{r}
+# Create a Scree plot to see the number of factors to use
+p = prcomp(datasetv6, center=T, scale=T)
+p
+
+#Check Scree Plot
+plot(p)
+abline(1, 0)
+summary(p)
+#options(max.print = 10000)  
+#print(p)
+table(p$sdev>1)
+```
+
+Using the scree plot above, I have decided to use the knee method to determine the number of factors to use for the FA analysis. As a result, I decided to use 5 factors since there is an elbow between 5-6 factors.
+
+```{r warning=FALSE}
+library(psych)
+#Conducting Factor Analysis
+fit = psych::fa(datasetv6, rotate="varimax", nfactors=5, scores=TRUE)
+print(fit$loadings, cutoff=.4, sort=T)
+summary(fit)
+```
+
+The cumulative variance is 0.424. The root mean square of the residuals (RMSA) is  0.08. In addition, FA was able to create 5 distinct factors out of the variables. 
+
+The plots below show the variable loadings for each respecting factor who are bigger than 0.4:
+
+```{r}
+library(dplyr)
+library(ggplot2)
+fa_factors <- as.data.frame(unclass(fit$loadings))
+fa_factor1_loading <- as.data.frame(fit$loadings[,1])
+fa_factor1_loading_big_point4 <- fa_factor1_loading %>% filter_at(vars(1:1), any_vars(abs(.) >0.4)) 
+
+fa_factor5_loading <- as.data.frame(fit$loadings[,2])
+fa_factor5_loading_big_point4 <- fa_factor5_loading %>% filter_at(vars(1:1), any_vars(abs(.) >0.4)) 
+
+fa_factor2_loading <- as.data.frame(fit$loadings[,3])
+fa_factor2_loading_big_point4 <- fa_factor2_loading %>% filter_at(vars(1:1), any_vars(abs(.) >0.4)) 
+
+fa_factor4_loading <- as.data.frame(fit$loadings[,4])
+fa_factor4_loading_big_point4 <- fa_factor4_loading %>% filter_at(vars(1:1), any_vars(abs(.) >0.4)) 
+
+fa_factor3_loading <- as.data.frame(fit$loadings[,5])
+fa_factor3_loading_big_point4 <- fa_factor3_loading %>% filter_at(vars(1:1), any_vars(abs(.) >0.4)) 
+
+#horizontal bar plot Factor 1
+ggplot(fa_factor1_loading_big_point4, aes(x=rownames(fa_factor1_loading_big_point4), y=fa_factor1_loading_big_point4[,1]))+
+  geom_bar(stat = "identity") + coord_flip() + ggtitle("Factor 1 loadings bigger than 0.4") +
+  xlab("Variables") + ylab("Loadings")
+
+#horizontal bar plot Factor 2
+ggplot(fa_factor2_loading_big_point4, aes(x=rownames(fa_factor2_loading_big_point4), y=fa_factor2_loading_big_point4[,1]))+
+  geom_bar(stat = "identity") + coord_flip() + ggtitle("Factor 2 loadings bigger than 0.4") +
+  xlab("Variables") + ylab("Loadings")
+
+#horizontal bar plot Factor 3
+ggplot(fa_factor3_loading_big_point4, aes(x=rownames(fa_factor3_loading_big_point4), y=fa_factor3_loading_big_point4[,1]))+
+  geom_bar(stat = "identity") + coord_flip() + ggtitle("Factor 3 loadings bigger than 0.4") +
+  xlab("Variables") + ylab("Loadings")
+#horizontal bar plot Factor 4
+
+ggplot(fa_factor4_loading_big_point4, aes(x=rownames(fa_factor4_loading_big_point4), y=fa_factor4_loading_big_point4[,1]))+
+  geom_bar(stat = "identity") + coord_flip() + ggtitle("Factor 4 loadings bigger than 0.4") +
+  xlab("Variables") + ylab("Loadings")
+
+#horizontal bar plot Factor 5
+ggplot(fa_factor5_loading_big_point4, aes(x=rownames(fa_factor5_loading_big_point4), y=fa_factor5_loading_big_point4[,1]))+
+  geom_bar(stat = "identity") + coord_flip() + ggtitle("Factor 5 loadings bigger than 0.4") +
+  xlab("Variables") + ylab("Loadings")
+
+```
+
+Looking at the plots, we can describe the variables accordingly:
+
+Factor 1: Loadings show that this factor is about a patient's highest blood pressure during their unit stay (during their first hour or during their first 24 hours).
+
+Factor 2: Loading shows that this factor is about a patients blood urea nitrogen, creatinine, potassium concentrations.
+
+Factor 3: Loadings indicate that this factor is about a patients heartrate, resperatition and temperature during their first hour or first 24 hours of the stay. These variables are vitals.
+
+Factor 4: Loadings indicate that this factor is about a patients red blood cells proportion and  hemaglobin levels during their first 24 hours of stay.
+
+Factor 5: Factor five is loadings are almost the opposite of Factor 1 and is about a patient's lowest blood pressure during their unit stay (during their first hour or during their first 24 hours).
+
+
+
+```{r} 
+# #SAMPLE PLOTS (control+shift+c)
+# plot(fit$loadings[,1], 
+#      fit$loadings[,2], 
+#      xlim = c(-0.2, 1), 
+#      ylim = c(-0.5, 1),
+#      xlab = "Factor 1", 
+#      ylab = "Factor 2", 
+#      main = "Factor 1 vs Factor 2")
+# text(fit$loadings[,1]-0.02, 
+#      fit$loadings[,2]+0.03,
+#       colnames(datasetv6),
+#       col="blue")
+# abline(h = 0, v = 0)
+# 
+# 
+# #SAMPLE
+# library(ggrepel)
+# ggplot(fa_factors, aes(MR1, MR2, label = rownames(fa_factors))) +
+#   geom_text_repel() +
+#   geom_point(color = 'red') +
+#   theme_classic(base_size = 10)
+```
+
+
